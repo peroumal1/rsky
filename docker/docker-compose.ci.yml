@@ -1,0 +1,83 @@
+# CI overlay — use on top of docker-compose.yml:
+#   docker compose -f docker/docker-compose.yml -f docker/docker-compose.ci.yml up -d
+#
+# Changes vs. base:
+#   • Adds a local PLC directory server so createAccount never calls plc.directory
+#   • Adds a SQL migrator service (no diesel-cli required in CI)
+#   • Overrides PDS_DID_PLC_URL to point at the local PLC
+
+services:
+  # Local PLC directory — accepts and resolves did:plc operations without network.
+  # The @did-plc/server package implements the full PLC protocol.
+  plc:
+    image: plc-dev:latest
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.plc
+    depends_on:
+      migrator:
+        condition: service_completed_successfully
+    environment:
+      PORT: "2582"
+      DATABASE_URL: "postgresql://rsky:rsky@postgres:5432/plc"
+    ports:
+      - "2582:2582"
+    healthcheck:
+      # TCP check — avoids depending on what HTTP status code GET / returns.
+      test: ["CMD", "node", "-e", "require('net').createConnection(2582,'localhost').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  # Runs Diesel migrations directly via psql — no diesel-cli required.
+  # Runs once then exits; rsky-pds depends on it completing successfully.
+  migrator:
+    image: postgres:16-alpine
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: rsky
+    volumes:
+      - ../rsky-pds/migrations:/migrations:ro
+    entrypoint:
+      - sh
+      - -c
+      - |
+        set -e
+        # Create plc database if it doesn't exist (for @did-plc/server)
+        psql -h postgres -U rsky -d postgres -c "SELECT 1 FROM pg_database WHERE datname='plc'" | grep -q 1 \
+          || psql -h postgres -U rsky -d postgres -c "CREATE DATABASE plc;"
+        PSQL="psql -h postgres -U rsky -d rsky_pds"
+        # Diesel bookkeeping table (idempotent)
+        $$PSQL -c "
+          CREATE TABLE IF NOT EXISTS __diesel_schema_migrations (
+            version VARCHAR(50) PRIMARY KEY NOT NULL,
+            run_on  TIMESTAMP   NOT NULL DEFAULT NOW()
+          );"
+        run_migration() {
+          local version="$$1" file="$$2"
+          if $$PSQL -tAc "SELECT 1 FROM __diesel_schema_migrations WHERE version='$$version'" | grep -q 1; then
+            echo "  skip $$version (already applied)"
+          else
+            echo "  apply $$version"
+            $$PSQL -f "$$file"
+            $$PSQL -c "INSERT INTO __diesel_schema_migrations(version) VALUES('$$version');"
+          fi
+        }
+        run_migration "00000000000000" /migrations/00000000000000_diesel_initial_setup/up.sql
+        run_migration "20231115004814" /migrations/2023-11-15-004814_pds_init/up.sql
+        run_migration "20240320042639" /migrations/2024-03-20-042639_account_deactivation/up.sql
+        echo "Migrations done."
+    restart: "no"
+
+  # Override rsky-pds to wait for the local PLC and migrator,
+  # and point its identity resolver at the local PLC.
+  rsky-pds:
+    depends_on:
+      plc:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
+    environment:
+      PDS_DID_PLC_URL: "http://plc:2582"

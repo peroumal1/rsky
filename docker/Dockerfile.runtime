@@ -1,0 +1,24 @@
+# Minimal runtime image — expects the binary to be pre-compiled on the host.
+# Used by CI: cargo build -p rsky-pds runs on the runner (debug build, ~3min),
+# then this image is assembled by just copying the binary in (~10 seconds, no
+# compilation). Debug build is sufficient for smoke/correctness testing.
+#
+# For local development use Dockerfile.dev instead (compiles inside Docker).
+#
+# Build context must be the repo root:
+#   docker build -f docker/Dockerfile.runtime -t rsky-pds-dev .
+
+FROM ubuntu:24.04
+
+RUN apt-get update && \
+    apt-get install -y ca-certificates libpq5 && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY target/debug/rsky-pds    /app/rsky-pds
+COPY rsky-pds/migrations       /app/migrations
+
+EXPOSE 2583
+
+CMD ["/app/rsky-pds"]

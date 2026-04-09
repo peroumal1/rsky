@@ -1,0 +1,5 @@
+FROM node:20-alpine
+WORKDIR /app
+RUN npm install @did-plc/server
+ENV PORT=2582
+CMD ["node", "/app/node_modules/@did-plc/server/dist/bin.js"]
