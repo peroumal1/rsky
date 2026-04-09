@@ -1,4 +1,5 @@
 /target
+!target/debug/rsky-pds
 **/*.rs.bk
 .vscode
 .DS_Store

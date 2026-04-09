@@ -68,10 +68,15 @@ pub fn gen_invite_codes(count: i32) -> Vec<String> {
 }
 
 pub fn validate_handle(handle: &str) -> bool {
-    let suffix: String = env::var("PDS_HOSTNAME").unwrap_or("localhost".to_owned());
-    let s_slice: &str = &suffix[..]; // take a full slice of the string
-    handle.ends_with(s_slice)
-    // Need to check suffix here and need to make sure handle doesn't include "." after trumming it
+    let hostname = env::var("PDS_HOSTNAME").unwrap_or("localhost".to_owned());
+    // Mirror ServerConfig::env_to_cfg: when hostname is localhost, handles live
+    // under .test; otherwise they must be subdomains of the configured hostname.
+    let suffix = if hostname == "localhost" {
+        ".test".to_string()
+    } else {
+        format!(".{hostname}")
+    };
+    handle.ends_with(&suffix)
 }
 
 pub fn get_keys_from_private_key_str(private_key: String) -> Result<(SecretKey, PublicKey)> {

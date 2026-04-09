@@ -1,0 +1,74 @@
+# Local development build — builds rsky-pds from the source tree on disk.
+# Uses cargo-chef for reliable Docker layer caching of Rust dependencies.
+# Use docker/docker-compose.yml to bring up the full stack.
+#
+# Build context must be the repo root:
+#   docker build -f docker/Dockerfile.dev -t rsky-pds-dev .
+
+# ── Stage 1: cargo-chef base ─────────────────────────────────────────────────
+# Pre-built image avoids compiling cargo-chef against our pinned toolchain.
+# Tag format: {cargo-chef-version}-rust-{rust-version}-{distro}
+FROM lukemathwalker/cargo-chef:latest-rust-1.86.0-bookworm AS chef
+
+RUN apt-get update && apt-get install -y libpq-dev && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /usr/src/rsky
+
+# ── Stage 2: compute dependency recipe ───────────────────────────────────────
+# Only Cargo.toml / Cargo.lock matter here. Source changes don't bust this layer.
+FROM chef AS planner
+
+COPY Cargo.toml Cargo.lock rust-toolchain ./
+COPY palomar-sync/Cargo.toml            palomar-sync/Cargo.toml
+COPY rsky-common/Cargo.toml             rsky-common/Cargo.toml
+COPY rsky-crypto/Cargo.toml             rsky-crypto/Cargo.toml
+COPY rsky-feedgen/Cargo.toml            rsky-feedgen/Cargo.toml
+COPY rsky-firehose/Cargo.toml           rsky-firehose/Cargo.toml
+COPY rsky-identity/Cargo.toml           rsky-identity/Cargo.toml
+COPY rsky-jetstream-subscriber/Cargo.toml rsky-jetstream-subscriber/Cargo.toml
+COPY rsky-labeler/Cargo.toml            rsky-labeler/Cargo.toml
+COPY rsky-lexicon/Cargo.toml            rsky-lexicon/Cargo.toml
+COPY rsky-pds/Cargo.toml               rsky-pds/Cargo.toml
+COPY rsky-relay/Cargo.toml             rsky-relay/Cargo.toml
+COPY rsky-repo/Cargo.toml              rsky-repo/Cargo.toml
+COPY rsky-satnav/Cargo.toml            rsky-satnav/Cargo.toml
+COPY rsky-syntax/Cargo.toml            rsky-syntax/Cargo.toml
+COPY rsky-video/Cargo.toml             rsky-video/Cargo.toml
+COPY rsky-wintermute/Cargo.toml        rsky-wintermute/Cargo.toml
+
+# Stub out src/ so cargo-chef can resolve the full workspace graph
+RUN for dir in palomar-sync rsky-common rsky-crypto rsky-feedgen rsky-firehose \
+        rsky-identity rsky-jetstream-subscriber rsky-labeler rsky-lexicon \
+        rsky-relay rsky-repo rsky-satnav rsky-syntax rsky-video rsky-wintermute; do \
+      mkdir -p $dir/src && echo "pub fn stub() {}" > $dir/src/lib.rs; \
+    done && \
+    mkdir -p rsky-pds/src && echo "fn main() {}" > rsky-pds/src/main.rs
+
+RUN cargo chef prepare --recipe-path recipe.json
+
+# ── Stage 3: cook (compile) dependencies ─────────────────────────────────────
+# This layer is cached as long as recipe.json doesn't change.
+FROM chef AS builder
+
+COPY --from=planner /usr/src/rsky/recipe.json recipe.json
+RUN cargo chef cook --release --package rsky-pds --recipe-path recipe.json
+
+# ── Stage 4: build rsky-pds from real source ─────────────────────────────────
+COPY . .
+RUN cargo build --release --package rsky-pds
+
+# ── Stage 5: minimal runtime image ───────────────────────────────────────────
+FROM debian:bookworm-slim
+
+RUN apt-get update && \
+    apt-get install -y ca-certificates libpq5 && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY --from=builder /usr/src/rsky/target/release/rsky-pds /app/rsky-pds
+COPY --from=builder /usr/src/rsky/rsky-pds/migrations     /app/migrations
+
+EXPOSE 2583
+
+CMD ["/app/rsky-pds"]
