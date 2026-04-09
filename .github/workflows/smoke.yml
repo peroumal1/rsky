@@ -31,6 +31,9 @@ jobs:
       - name: Install libpq
         run: sudo apt-get update && sudo apt-get install -y libpq-dev
 
+      - name: Pre-pull Postgres image
+        run: docker pull postgres:11-alpine
+
       - name: Run rsky-pds tests
         run: |
           PDS_ADMIN_PASS=ci-admin-pass \

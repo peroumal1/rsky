@@ -190,21 +190,30 @@ impl Fairing for CORS {
     }
 }
 
+/// AppView override for integration tests. When set, `build_rocket` injects
+/// this as `cfg.bsky_app_view` and enables `dev_mode` so that HTTP loopback
+/// URLs pass the `is_safe_url` check.
+pub struct AppViewConfig {
+    pub url: String,
+    pub did: String,
+}
+
 pub struct RocketConfig {
     pub db_url: String,
+    /// Optional mock AppView injected by tests. Ignored in production.
+    pub app_view: Option<AppViewConfig>,
 }
 
 pub async fn build_rocket(cfg: Option<RocketConfig>) -> Rocket<Build> {
     dotenv().ok();
 
-    let db_url = if let Some(cfg) = cfg {
-        cfg.db_url
-    } else {
-        env::var("DATABASE_URL").unwrap_or("".into())
+    let (db_url, app_view_override) = match cfg {
+        Some(cfg) => (cfg.db_url, cfg.app_view),
+        None => (env::var("DATABASE_URL").unwrap_or("".into()), None),
     };
 
     let db: Map<_, Value> = map! {
-        "url" => db_url.into(),
+        "url" => db_url.clone().into(),
         "pool_size" => 20.into(),
         "timeout" => 30.into(),
     };
@@ -212,12 +221,24 @@ pub async fn build_rocket(cfg: Option<RocketConfig>) -> Rocket<Build> {
     let figment = rocket::Config::figment()
         .merge(("databases", map!["pg_db" => db]))
         .merge(("limits", Limits::default().limit("file", 100.mebibytes())));
-    let cfg = env_to_cfg();
+    let mut cfg = env_to_cfg();
+
+    // Inject test AppView if provided, enabling dev_mode so that HTTP
+    // loopback URLs are accepted by pipethrough's is_safe_url check.
+    if let Some(av) = app_view_override {
+        cfg.bsky_app_view = Some(crate::config::ServiceConfig {
+            url: av.url,
+            did: av.did,
+            cdn_url_pattern: None,
+        });
+        cfg.service.dev_mode = true;
+    }
 
     let sequencer = SharedSequencer {
         sequencer: RwLock::new(Sequencer::new(
             Crawlers::new(cfg.service.hostname.clone(), cfg.crawlers.clone()),
             None,
+            Some(db_url.clone()),
         )),
     };
     let mut background_sequencer = sequencer.sequencer.write().await.clone();

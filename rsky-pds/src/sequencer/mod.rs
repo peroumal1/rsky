@@ -9,6 +9,8 @@ use crate::sequencer::events::{
 };
 use crate::EVENT_EMITTER;
 use anyhow::Result;
+use diesel::pg::PgConnection;
+use diesel::prelude::*;
 use diesel::*;
 use events::format_seq_sync_evt;
 use futures::{Stream, StreamExt};
@@ -16,6 +18,7 @@ use rsky_common::time::SECOND;
 use rsky_common::{cbor_to_struct, wait};
 use rsky_repo::types::CommitDataWithOps;
 use std::cmp;
+use std::env;
 use std::pin::Pin;
 use std::task::{Context, Poll, Waker};
 
@@ -33,17 +36,29 @@ pub struct Sequencer {
     pub waker: Option<Waker>,
     pub crawlers: Crawlers,
     pub last_seen: Option<i64>,
+    /// Database URL used for the sequencer's own connections. Falls back to
+    /// the `DATABASE_URL` env var when not explicitly provided (production).
+    pub db_url: String,
 }
 
 impl Sequencer {
-    pub fn new(crawlers: Crawlers, last_seen: Option<i64>) -> Self {
+    pub fn new(crawlers: Crawlers, last_seen: Option<i64>, db_url: Option<String>) -> Self {
+        let db_url =
+            db_url.unwrap_or_else(|| env::var("DATABASE_URL").unwrap_or_default());
         Sequencer {
             destroyed: false,
             tries_with_no_results: 0,
             last_seen: Some(last_seen.unwrap_or(0)),
             waker: None,
             crawlers,
+            db_url,
         }
+    }
+
+    fn establish_connection(&self) -> Result<PgConnection> {
+        PgConnection::establish(&self.db_url).map_err(|e| {
+            anyhow::anyhow!("Sequencer failed to connect to {:?}: {}", self.db_url, e)
+        })
     }
 
     pub async fn start(&mut self) -> Result<()> {
@@ -67,7 +82,7 @@ impl Sequencer {
 
     pub async fn curr(&self) -> Result<Option<i64>> {
         use crate::schema::pds::repo_seq::dsl as RepoSeqSchema;
-        let conn = &mut establish_connection_for_sequencer()?;
+        let conn = &mut self.establish_connection()?;
 
         let got = RepoSeqSchema::repo_seq
             .select(models::RepoSeq::as_select())
@@ -82,7 +97,7 @@ impl Sequencer {
 
     pub async fn next_seq(&self, cursor: i64) -> Result<Option<models::RepoSeq>> {
         use crate::schema::pds::repo_seq::dsl as RepoSeqSchema;
-        let conn = &mut establish_connection_for_sequencer()?;
+        let conn = &mut self.establish_connection()?;
 
         let got = RepoSeqSchema::repo_seq
             .filter(RepoSeqSchema::seq.gt(cursor))
@@ -95,7 +110,7 @@ impl Sequencer {
 
     pub async fn earliest_after_time(&self, time: String) -> Result<Option<models::RepoSeq>> {
         use crate::schema::pds::repo_seq::dsl as RepoSeqSchema;
-        let conn = &mut establish_connection_for_sequencer()?;
+        let conn = &mut self.establish_connection()?;
 
         let got = RepoSeqSchema::repo_seq
             .filter(RepoSeqSchema::sequencedAt.ge(time))
@@ -108,7 +123,7 @@ impl Sequencer {
 
     pub async fn request_seq_range(&self, opts: RequestSeqRangeOpts) -> Result<Vec<SeqEvt>> {
         use crate::schema::pds::repo_seq::dsl as RepoSeqSchema;
-        let conn = &mut establish_connection_for_sequencer()?;
+        let conn = &mut self.establish_connection()?;
 
         let RequestSeqRangeOpts {
             earliest_seq,
@@ -202,7 +217,7 @@ impl Sequencer {
 
     pub async fn sequence_evt(&mut self, evt: models::RepoSeq) -> Result<i64> {
         use crate::schema::pds::repo_seq::dsl as RepoSeqSchema;
-        let conn = &mut establish_connection_for_sequencer()?;
+        let conn = &mut self.establish_connection()?;
 
         let res = insert_into(RepoSeqSchema::repo_seq)
             .values((
