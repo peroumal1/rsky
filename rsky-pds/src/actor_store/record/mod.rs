@@ -460,7 +460,7 @@ impl RecordReader {
     }
 
     pub async fn add_backlinks(&self, backlinks: Vec<Backlink>) -> Result<()> {
-        if backlinks.len() == 0 {
+        if backlinks.is_empty() {
             Ok(())
         } else {
             use crate::schema::pds::backlink::dsl as BacklinkSchema;

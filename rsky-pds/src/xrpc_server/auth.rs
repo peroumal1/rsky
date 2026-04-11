@@ -63,8 +63,10 @@ where
             if now > payload.exp as u128 {
                 bail!("JwtExpired: jwt expired")
             }
-            if own_did.is_some() && payload.aud != own_did.unwrap() {
-                bail!("BadJwtAudience: jwt audience does not match service did")
+            if let Some(did) = own_did {
+                if payload.aud != did {
+                    bail!("BadJwtAudience: jwt audience does not match service did")
+                }
             }
             let msg_bytes = parts[0..2].join(".").into_bytes();
             let sig_bytes = Base64::encode_string(sig.as_bytes())

@@ -86,14 +86,14 @@ pub fn env_to_cfg() -> ServerConfig {
         contact_email_address: env_str("PDS_CONTACT_EMAIL_ADDRESS"),
         dev_mode: env_bool("PDS_DEV_MODE").unwrap_or(false),
     };
-    let service_handle_domains: Vec<String>;
-    if env_list("PDS_SERVICE_HANDLE_DOMAINS").len() > 0 {
-        service_handle_domains = env_list("PDS_SERVICE_HANDLE_DOMAINS");
+    let env_domains = env_list("PDS_SERVICE_HANDLE_DOMAINS");
+    let service_handle_domains: Vec<String> = if !env_domains.is_empty() {
+        env_domains
     } else if hostname == "localhost" {
-        service_handle_domains = vec![".test".to_string()];
+        vec![".test".to_string()]
     } else {
-        service_handle_domains = vec![format!(".{hostname}")];
-    }
+        vec![format!(".{hostname}")]
+    };
     let identity_cfg: IdentityConfig = IdentityConfig {
         plc_url: env_str("PDS_DID_PLC_URL").unwrap_or("https://plc.directory".to_string()),
         resolver_timeout: env_int("PDS_ID_RESOLVER_TIMEOUT").unwrap_or_else(|| 3 * SECOND as usize)

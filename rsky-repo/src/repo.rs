@@ -128,7 +128,7 @@ impl Repo {
             .collect::<Vec<Cid>>();
         let storage_guard = self.storage.read().await;
         let found = storage_guard.get_blocks(cids).await?;
-        if found.missing.len() > 0 {
+        if !found.missing.is_empty() {
             return Err(anyhow::Error::new(DataStoreError::MissingBlocks(
                 "getContents record".to_owned(),
                 found.missing,
@@ -259,7 +259,7 @@ impl Repo {
         }
 
         let added_leaves = leaves.get_many(diff.new_leaf_cids.to_list())?;
-        if added_leaves.missing.len() > 0 {
+        if !added_leaves.missing.is_empty() {
             bail!("Missing leaf blocks: {:?}", added_leaves.missing);
         }
         new_blocks.add_map(added_leaves.blocks.clone())?;
@@ -939,7 +939,7 @@ mod tests {
         let proofs = get_records(repo.storage.clone(), repo.cid, claims_as_record_paths).await?;
         let results = verify_proofs(proofs, claims.clone(), repo_did, &did_key).await?;
 
-        assert!(results.verified.len() > 0);
+        assert!(!results.verified.is_empty());
         assert_eq!(results.verified, claims);
         assert_eq!(results.unverified.len(), 0);
         Ok(())
@@ -978,7 +978,7 @@ mod tests {
         let proofs = get_records(repo.storage.clone(), repo.cid, claims_as_record_paths).await?;
         let results = verify_proofs(proofs, claims.clone(), repo_did, &did_key).await?;
 
-        assert!(results.verified.len() > 0);
+        assert!(!results.verified.is_empty());
         assert_eq!(results.verified, claims);
         assert_eq!(results.unverified.len(), 0);
         Ok(())
@@ -1019,7 +1019,7 @@ mod tests {
         let results = verify_proofs(proofs, claims.clone(), repo_did, &did_key).await?;
 
         assert_eq!(results.verified.len(), 0);
-        assert!(results.unverified.len() > 0);
+        assert!(!results.unverified.is_empty());
         assert_eq!(results.unverified, claims);
         Ok(())
     }
@@ -1060,7 +1060,7 @@ mod tests {
         let results = verify_proofs(proofs, claims.clone(), repo_did, &did_key).await?;
 
         assert_eq!(results.verified.len(), 0);
-        assert!(results.unverified.len() > 0);
+        assert!(!results.unverified.is_empty());
         assert_eq!(results.unverified, claims);
         Ok(())
     }
@@ -1100,7 +1100,7 @@ mod tests {
         let results = verify_proofs(proofs, claims.clone(), repo_did, &did_key).await?;
 
         assert_eq!(results.verified.len(), 0);
-        assert!(results.unverified.len() > 0);
+        assert!(!results.unverified.is_empty());
         assert_eq!(results.unverified, claims);
         Ok(())
     }

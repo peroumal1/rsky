@@ -98,7 +98,7 @@ pub async fn get_records(
             });
     let storage_guard = storage.read().await;
     let found = storage_guard.get_blocks(all_cids.to_list()).await?;
-    if found.missing.len() > 0 {
+    if !found.missing.is_empty() {
         return Err(anyhow::Error::new(DataStoreError::MissingBlocks(
             "writeRecordsToCarStream".to_owned(),
             found.missing,

@@ -293,7 +293,7 @@ impl Stream for Sequencer {
                 Poll::Ready(Some(Err(err)))
             }
             Ok(evts) => {
-                if evts.len() > 0 {
+                if !evts.is_empty() {
                     self.tries_with_no_results = 0;
                     futures::executor::block_on(EVENT_EMITTER.write()).emit(
                         "events",
@@ -325,7 +325,7 @@ pub async fn delete_all_for_user(did: &String, excluding_seqs: Option<Vec<i64>>)
     let mut builder = delete(RepoSeqSchema::repo_seq)
         .filter(RepoSeqSchema::did.eq(did))
         .into_boxed();
-    if excluding_seqs.len() > 0 {
+    if !excluding_seqs.is_empty() {
         builder = builder.filter(RepoSeqSchema::seq.ne_all(excluding_seqs));
     }
     builder.execute(conn)?;

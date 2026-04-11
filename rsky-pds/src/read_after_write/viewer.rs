@@ -333,17 +333,20 @@ impl LocalViewer {
                 let images = embed
                     .images
                     .into_iter()
-                    .map(|img| ViewImage {
-                        thumb: self.get_image_url(
-                            "feed_thumbnail".to_string(),
-                            img.image.r#ref.clone().unwrap().to_string(),
-                        ),
-                        fullsize: self.get_image_url(
-                            "feed_fullsize".to_string(),
-                            img.image.r#ref.unwrap().to_string(),
-                        ),
-                        alt: img.alt,
-                        aspect_ratio: img.aspect_ratio,
+                    .map(|img| {
+                        let image_ref = img.image.r#ref.unwrap().to_string();
+                        ViewImage {
+                            thumb: self.get_image_url(
+                                "feed_thumbnail".to_string(),
+                                image_ref.clone(),
+                            ),
+                            fullsize: self.get_image_url(
+                                "feed_fullsize".to_string(),
+                                image_ref,
+                            ),
+                            alt: img.alt,
+                            aspect_ratio: img.aspect_ratio,
+                        }
                     })
                     .collect::<Vec<ViewImage>>();
                 EmbedViews::ImagesView(ImagesView { images })

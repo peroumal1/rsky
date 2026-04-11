@@ -228,7 +228,7 @@ pub async fn add_posts_to_thread(
     posts: Vec<RecordDescript<Post>>,
 ) -> Result<ThreadViewPost> {
     let in_thread = find_posts_in_thread(&original, posts);
-    if in_thread.len() == 0 {
+    if in_thread.is_empty() {
         return Ok(original);
     }
     let mut thread = original;

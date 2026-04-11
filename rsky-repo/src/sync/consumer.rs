@@ -80,7 +80,7 @@ pub async fn verify_diff(
     let writes = util::diff_to_write_descripts(&diff).await?;
     let mut new_blocks = diff.new_mst_blocks;
     let leaves = update_blocks.get_many(diff.new_leaf_cids.to_list())?;
-    if leaves.missing.len() > 0 && ensure_leaves {
+    if !leaves.missing.is_empty() && ensure_leaves {
         bail!("missing leaf blocks: {:?}", leaves.missing);
     }
     new_blocks.add_map(leaves.blocks)?;

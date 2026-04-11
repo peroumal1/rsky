@@ -31,7 +31,10 @@ pub async fn ensure_invite_is_available(invite_code: String, db: &DbConn) -> Res
             .first(conn)
             .optional()?;
 
-        if invite.is_none() || invite.clone().unwrap().disabled > 0 {
+        let Some(invite) = invite else {
+            bail!("InvalidInviteCode: None or disabled. Provided invite code not available `{invite_code:?}`")
+        };
+        if invite.disabled > 0 {
             bail!("InvalidInviteCode: None or disabled. Provided invite code not available `{invite_code:?}`")
         }
 
@@ -40,7 +43,7 @@ pub async fn ensure_invite_is_available(invite_code: String, db: &DbConn) -> Res
             .filter(InviteCodeUseSchema::code.eq(&invite_code))
             .first(conn)?;
 
-        if invite.unwrap().available_uses as i64 <= uses {
+        if invite.available_uses as i64 <= uses {
             bail!("InvalidInviteCode: Not enough uses. Provided invite code not available `{invite_code:?}`")
         }
         Ok(())

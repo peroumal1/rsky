@@ -759,7 +759,7 @@ pub async fn validate_bearer_token<'r>(
             if !aud.starts_with("did:") {
                 bail!("Malformed token")
             }
-            if scopes.len() > 0 && !scopes.contains(&scope) {
+            if !scopes.is_empty() && !scopes.contains(&scope) {
                 bail!("Bad token scope")
                 /*{
                     "error": "InvalidToken",

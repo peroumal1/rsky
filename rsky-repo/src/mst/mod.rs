@@ -682,7 +682,7 @@ impl MST {
             }
         }
 
-        if outdated.len() > 0 {
+        if !outdated.is_empty() {
             for outdated_entry in &outdated {
                 let _ = outdated_entry.get_pointer().await?;
             }
@@ -945,7 +945,7 @@ impl MST {
         return if let Some(NodeEntry::MST(mut p)) = prev {
             let subtree = &mut p.delete_recurse(key).await?;
             let subtree_entries = subtree.get_entries().await?;
-            if subtree_entries.len() == 0 {
+            if subtree_entries.is_empty() {
                 self.remove_entry(index - 1).await
             } else {
                 self.update_entry(index - 1, NodeEntry::MST(subtree.clone()))
@@ -1427,7 +1427,7 @@ impl MST {
                 let storage_guard = self.storage.read().await;
                 storage_guard.get_blocks(to_fetch.to_list()).await?
             };
-            if fetched.missing.len() > 0 {
+            if !fetched.missing.is_empty() {
                 return Err(anyhow::Error::new(DataStoreError::MissingBlocks(
                     "mst node".to_owned(),
                     fetched.missing,
@@ -1458,7 +1458,7 @@ impl MST {
             let storage_guard = self.storage.read().await;
             storage_guard.get_blocks(leaves.to_list()).await?
         };
-        if leaf_data.missing.len() > 0 {
+        if !leaf_data.missing.is_empty() {
             return Err(anyhow::Error::new(DataStoreError::MissingBlocks(
                 "mst leaf".to_owned(),
                 leaf_data.missing,

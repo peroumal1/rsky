@@ -31,8 +31,8 @@ pub fn is_valid_repo_mst_path(key: &str) -> Result<bool> {
 
     return if key.len() <= 256
         && split.len() == 2
-        && split[0].len() > 0
-        && split[1].len() > 0
+        && !split[0].is_empty()
+        && !split[1].is_empty()
         && is_valid_chars(split[0])
         && is_valid_chars(split[1])
     {
