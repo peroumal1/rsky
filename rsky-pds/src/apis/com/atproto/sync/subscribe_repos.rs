@@ -47,6 +47,7 @@ pub async fn subscribe_repos<'a>(
         let sequencer_lock = Sequencer::new(
             Crawlers::new(cfg.service.hostname.clone(), cfg.crawlers.clone()),
             None,
+            None,
         );
         let mut outbox = Outbox::new(
             sequencer_lock.clone(),
