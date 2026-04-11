@@ -133,11 +133,7 @@ impl RecordReader {
         use crate::schema::pds::record::dsl as RecordSchema;
         use crate::schema::pds::repo_block::dsl as RepoBlockSchema;
 
-        let include_soft_deleted: bool = if let Some(include_soft_deleted) = include_soft_deleted {
-            include_soft_deleted
-        } else {
-            false
-        };
+        let include_soft_deleted = include_soft_deleted.unwrap_or(false);
         let mut builder = RecordSchema::record
             .inner_join(RepoBlockSchema::repo_block.on(RepoBlockSchema::cid.eq(RecordSchema::cid)))
             .limit(limit)
@@ -190,11 +186,7 @@ impl RecordReader {
         use crate::schema::pds::record::dsl as RecordSchema;
         use crate::schema::pds::repo_block::dsl as RepoBlockSchema;
 
-        let include_soft_deleted: bool = if let Some(include_soft_deleted) = include_soft_deleted {
-            include_soft_deleted
-        } else {
-            false
-        };
+        let include_soft_deleted = include_soft_deleted.unwrap_or(false);
         let mut builder = RecordSchema::record
             .inner_join(RepoBlockSchema::repo_block.on(RepoBlockSchema::cid.eq(RecordSchema::cid)))
             .select((models::Record::as_select(), models::RepoBlock::as_select()))
@@ -231,11 +223,7 @@ impl RecordReader {
     ) -> Result<bool> {
         use crate::schema::pds::record::dsl as RecordSchema;
 
-        let include_soft_deleted: bool = if let Some(include_soft_deleted) = include_soft_deleted {
-            include_soft_deleted
-        } else {
-            false
-        };
+        let include_soft_deleted = include_soft_deleted.unwrap_or(false);
         let mut builder = RecordSchema::record
             .select(RecordSchema::uri)
             .filter(RecordSchema::uri.eq(uri))
@@ -250,7 +238,7 @@ impl RecordReader {
             .db
             .run(move |conn| builder.first::<String>(conn).optional())
             .await?;
-        Ok(!!record_uri.is_some())
+        Ok(record_uri.is_some())
     }
 
     pub async fn get_record_takedown_status(&self, uri: String) -> Result<Option<StatusAttr>> {

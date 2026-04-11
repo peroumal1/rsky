@@ -49,7 +49,7 @@ impl ReadableBlockstore for SqlRepoReader {
                 cache_guard.get(cid).map(|v| v.clone())
             };
             if let Some(cached_result) = cached {
-                return Ok(Some(cached_result.clone()));
+                return Ok(Some(cached_result));
             }
 
             let found: Option<Vec<u8>> = db

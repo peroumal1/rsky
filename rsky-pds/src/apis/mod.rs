@@ -28,6 +28,19 @@ impl<'a> FromParam<'a> for Nsid {
     }
 }
 
+fn build_proxy_responder(res: crate::xrpc_server::types::HandlerPipeThrough) -> ProxyResponder {
+    let headers = res.headers.expect("Upstream responded without headers.");
+    let content_length = match headers.get("content-length") {
+        None => Header::new("content-length", res.buffer.len().to_string()),
+        Some(val) => Header::new("content-length", val.to_string()),
+    };
+    let content_type = match headers.get("content-type") {
+        None => Header::new("content-type", "application/octet-stream".to_string()),
+        Some(val) => Header::new("Content-Type", val.to_string()),
+    };
+    ProxyResponder(res.buffer, content_length, content_type)
+}
+
 // Lower ranks have higher presidence
 #[tracing::instrument(skip_all)]
 #[allow(unused_variables)]
@@ -43,18 +56,7 @@ pub async fn bsky_api_get_forwarder(
         Some(credentials) => credentials.did,
     };
     match pipethrough_procedure::<()>(&req, requester, None).await {
-        Ok(res) => {
-            let headers = res.headers.expect("Upstream responded without headers.");
-            let content_length = match headers.get("content-length") {
-                None => Header::new("content-length", res.buffer.len().to_string()),
-                Some(val) => Header::new("content-length", val.to_string()),
-            };
-            let content_type = match headers.get("content-type") {
-                None => Header::new("content-type", "octet-stream".to_string()),
-                Some(val) => Header::new("Content-Type", val.to_string()),
-            };
-            Ok(ProxyResponder(res.buffer, content_length, content_type))
-        }
+        Ok(res) => Ok(build_proxy_responder(res)),
         Err(error) => {
             tracing::error!("@LOG: ERROR: {error}");
             Err(ApiError::RuntimeError)
@@ -73,18 +75,8 @@ pub async fn bsky_api_post_forwarder(
         None => None,
         Some(credentials) => credentials.did,
     };
-
     let res = pipethrough_procedure_post(&req, requester, Some(body)).await?;
-    let headers = res.headers.expect("Upstream responded without headers.");
-    let content_length = match headers.get("content-length") {
-        None => Header::new("content-length", res.buffer.len().to_string()),
-        Some(val) => Header::new("content-length", val.to_string()),
-    };
-    let content_type = match headers.get("content-type") {
-        None => Header::new("content-type", "application/octet-stream".to_string()),
-        Some(val) => Header::new("Content-Type", val.to_string()),
-    };
-    Ok(ProxyResponder(res.buffer, content_length, content_type))
+    Ok(build_proxy_responder(res))
 }
 
 #[derive(Clone, Debug)]
