@@ -75,48 +75,44 @@ pub async fn inner_get_post_thread(
             .await?;
             Ok(read_afer_write_response)
         }
-        Err(err) => match err.downcast_ref() {
-            Some(InvalidRequestError::XRPCError(xrpc)) => {
-                if let XRPCError::FailedResponse {
-                    status,
-                    error,
-                    message,
-                    headers,
-                } = xrpc
-                {
-                    match error {
-                        Some(error) if error == "NotFound" => {
-                            let actor_store = ActorStore::new(
-                                requester.clone(),
-                                S3BlobStore::new(requester.clone(), s3_config),
-                                db,
-                            );
-                            let local_viewer_lock = state_local_viewer.local_viewer.read().await;
-                            let local_viewer = local_viewer_lock(actor_store, account_manager);
-                            let local = read_after_write_not_found(
-                                local_viewer,
-                                uri,
-                                parentHeight,
-                                requester,
-                                Some(headers.clone()),
-                                cfg,
-                            )
-                            .await?;
-                            match local {
-                                None => Err(err),
-                                Some(local) => Ok(ReadAfterWriteResponse::HandlerResponse(
-                                    format_munged_response(local.data, local.lag)?,
-                                )),
-                            }
-                        }
-                        _ => Err(err),
-                    }
-                } else {
-                    Err(err)
-                }
+        Err(err) => {
+            // Only handle NotFound XRPC errors — try reading from local state.
+            // All other errors propagate as-is.
+            let Some(InvalidRequestError::XRPCError(XRPCError::FailedResponse {
+                error: Some(ref error_code),
+                ref headers,
+                ..
+            })) = err.downcast_ref()
+            else {
+                return Err(err);
+            };
+            if error_code != "NotFound" {
+                return Err(err);
             }
-            _ => Err(err),
-        },
+            let headers = headers.clone();
+            let actor_store = ActorStore::new(
+                requester.clone(),
+                S3BlobStore::new(requester.clone(), s3_config),
+                db,
+            );
+            let local_viewer_lock = state_local_viewer.local_viewer.read().await;
+            let local_viewer = local_viewer_lock(actor_store, account_manager);
+            let local = read_after_write_not_found(
+                local_viewer,
+                uri,
+                parentHeight,
+                requester,
+                Some(headers),
+                cfg,
+            )
+            .await?;
+            match local {
+                None => Err(err),
+                Some(local) => Ok(ReadAfterWriteResponse::HandlerResponse(
+                    format_munged_response(local.data, local.lag)?,
+                )),
+            }
+        }
     }
 }
 

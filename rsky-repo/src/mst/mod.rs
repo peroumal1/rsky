@@ -1009,65 +1009,60 @@ impl MST {
     }
 
     /// returns a slice of the node
+    ///
+    /// Mirrors JavaScript Array.prototype.slice() semantics:
+    /// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/slice
     pub async fn slice(&self, start: Option<isize>, end: Option<isize>) -> Result<Vec<NodeEntry>> {
         let entries = self.get_entries().await?;
-        let entry_len = entries.len() as isize;
-        match (start, end) {
-            (Some(start), Some(end)) => {
-                // Adapted from Javascript Array.prototype.slice()
-                // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/slice
-                let start: usize = if start < 0 && start >= (-1 * entry_len) {
-                    (start + entry_len) as usize
-                } else if start < (-1 * entry_len) {
-                    0
-                } else if start >= entry_len {
-                    return Ok(vec![]);
-                } else {
-                    start as usize
-                };
+        let len = entries.len() as isize;
 
-                let end: usize = if end < 0 && end >= (-1 * entry_len) {
-                    (end + entry_len) as usize
-                } else if end < (-1 * entry_len) {
-                    0
-                } else if end >= entry_len {
-                    entries.len()
-                } else if end <= start as isize {
-                    return Ok(vec![]);
-                } else {
-                    end as usize
-                };
-
-                Ok(entries[start..end].to_vec())
+        // Returns None when the index is beyond the end (signals an empty result for start).
+        // For start indices: out-of-bounds high means empty slice.
+        fn resolve_start(idx: isize, len: isize) -> Option<usize> {
+            if idx < 0 {
+                Some(if idx >= -len { (idx + len) as usize } else { 0 })
+            } else if idx >= len {
+                None // signals empty
+            } else {
+                Some(idx as usize)
             }
-            (Some(start), None) => {
-                let start: usize = if start < 0 && start >= (-1 * entry_len) {
-                    (start + entry_len) as usize
-                } else if start < (-1 * entry_len) {
-                    0
-                } else if start >= entry_len {
-                    return Ok(vec![]);
-                } else {
-                    start as usize
-                };
-                Ok(entries[start..].to_vec())
-            }
-            (None, Some(end)) => {
-                let end: usize = if end < 0 && end >= (-1 * entry_len) {
-                    (end + entry_len) as usize
-                } else if end < (-1 * entry_len) {
-                    0
-                } else if end >= entry_len {
-                    entries.len()
-                } else if end <= 0 {
-                    return Ok(vec![]);
-                } else {
-                    end as usize
-                };
-                Ok(entries[..end].to_vec())
-            }
-            (None, None) => Ok(entries),
         }
+
+        // For end indices: out-of-bounds high clamps to len (include everything).
+        fn resolve_end(idx: isize, len: isize) -> usize {
+            if idx < 0 {
+                if idx >= -len {
+                    (idx + len) as usize
+                } else {
+                    0
+                }
+            } else if idx >= len {
+                len as usize
+            } else {
+                idx as usize
+            }
+        }
+
+        let start = match start {
+            None => 0,
+            Some(s) => match resolve_start(s, len) {
+                Some(s) => s,
+                None => return Ok(vec![]),
+            },
+        };
+
+        let end = match end {
+            None => entries.len(),
+            Some(e) => {
+                let e = resolve_end(e, len);
+                if e <= start {
+                    return Ok(vec![]);
+                }
+                e
+            }
+        };
+
+        Ok(entries[start..end].to_vec())
     }
 
     /// inserts entry at index
