@@ -43,8 +43,7 @@ pub struct Sequencer {
 
 impl Sequencer {
     pub fn new(crawlers: Crawlers, last_seen: Option<i64>, db_url: Option<String>) -> Self {
-        let db_url =
-            db_url.unwrap_or_else(|| env::var("DATABASE_URL").unwrap_or_default());
+        let db_url = db_url.unwrap_or_else(|| env::var("DATABASE_URL").unwrap_or_default());
         Sequencer {
             destroyed: false,
             tries_with_no_results: 0,
@@ -56,9 +55,8 @@ impl Sequencer {
     }
 
     fn establish_connection(&self) -> Result<PgConnection> {
-        PgConnection::establish(&self.db_url).map_err(|e| {
-            anyhow::anyhow!("Sequencer failed to connect to {:?}: {}", self.db_url, e)
-        })
+        PgConnection::establish(&self.db_url)
+            .map_err(|e| anyhow::anyhow!("Sequencer failed to connect to {:?}: {}", self.db_url, e))
     }
 
     pub async fn start(&mut self) -> Result<()> {

@@ -88,10 +88,8 @@ async fn get_profile_postscount_incremented_after_local_create_record() {
         .await;
     assert_eq!(commit_resp.status(), Status::Ok, "getLatestCommit");
 
-    let commit: GetLatestCommitOutput = commit_resp
-        .into_json()
-        .await
-        .expect("getLatestCommit JSON");
+    let commit: GetLatestCommitOutput =
+        commit_resp.into_json().await.expect("getLatestCommit JSON");
     let sentinel_rev = commit.rev;
 
     // ── 4. Write profile record (rkey "self") ─────────────────────────────────
@@ -288,7 +286,8 @@ async fn get_profile_appview_current_skips_munge() {
         .dispatch()
         .await;
     assert_eq!(commit_resp.status(), Status::Ok, "getLatestCommit");
-    let commit: GetLatestCommitOutput = commit_resp.into_json().await.expect("getLatestCommit JSON");
+    let commit: GetLatestCommitOutput =
+        commit_resp.into_json().await.expect("getLatestCommit JSON");
     let current_rev = commit.rev;
 
     // Mock returns the current HEAD rev → no local records after it.
