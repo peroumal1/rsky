@@ -10,13 +10,10 @@
 ///
 /// Response shape reference
 /// ------------------------
-/// When the munge is applied, `getProfile` returns a `HandlerResponse` envelope:
-///   { "encoding": "application/json", "body": { ...profile... }, "headers": {...} }
-/// so the profile fields live at `body["body"][...]`.
-///
-/// When the munge is skipped (unauthenticated, AppView already current, or no
-/// local "self" profile), the raw AppView bytes are forwarded as-is
-/// (`HandlerPipeThrough`), so profile fields live directly at `body[...]`.
+/// In both the munge and pass-through paths, the HTTP response body is the
+/// raw profile JSON — profile fields are always at `body[...]`. The
+/// `HandlerResponse` wrapper is an internal Rust type; the `Responder` impl
+/// serialises only `handler_response.body`, not the envelope.
 use rocket::http::{ContentType, Header, Status};
 use rsky_lexicon::com::atproto::sync::GetLatestCommitOutput;
 use serde_json::json;
@@ -88,10 +85,8 @@ async fn get_profile_postscount_incremented_after_local_create_record() {
         .await;
     assert_eq!(commit_resp.status(), Status::Ok, "getLatestCommit");
 
-    let commit: GetLatestCommitOutput = commit_resp
-        .into_json()
-        .await
-        .expect("getLatestCommit JSON");
+    let commit: GetLatestCommitOutput =
+        commit_resp.into_json().await.expect("getLatestCommit JSON");
     let sentinel_rev = commit.rev;
 
     // ── 4. Write profile record (rkey "self") ─────────────────────────────────
@@ -181,11 +176,8 @@ async fn get_profile_postscount_incremented_after_local_create_record() {
         .await
         .expect("getProfile must return valid JSON");
 
-    // The munge path returns HandlerResponse<T> which serialises as
-    // { "encoding": "...", "body": { ...profile... }, "headers": {...} }.
-    // Access the nested profile body.
     assert_eq!(
-        body["body"]["postsCount"], 6,
+        body["postsCount"], 6,
         "postsCount should be upstream (5) + 1 local post after sentinel rev = 6, got: {body}"
     );
 }
@@ -288,7 +280,8 @@ async fn get_profile_appview_current_skips_munge() {
         .dispatch()
         .await;
     assert_eq!(commit_resp.status(), Status::Ok, "getLatestCommit");
-    let commit: GetLatestCommitOutput = commit_resp.into_json().await.expect("getLatestCommit JSON");
+    let commit: GetLatestCommitOutput =
+        commit_resp.into_json().await.expect("getLatestCommit JSON");
     let current_rev = commit.rev;
 
     // Mock returns the current HEAD rev → no local records after it.
@@ -434,11 +427,11 @@ async fn get_profile_no_local_profile_record_postscount_unchanged() {
         .await
         .expect("getProfile must return valid JSON");
 
-    // local.count > 0 (one post after sentinel_rev) → munge is entered and
-    // response is wrapped in HandlerResponse. But local.profile = None →
-    // munge returns original unchanged → postsCount stays at upstream value.
+    // local.count > 0 (one post after sentinel_rev) → munge is entered.
+    // But local.profile = None → munge returns original unchanged →
+    // postsCount stays at upstream value.
     assert_eq!(
-        body["body"]["postsCount"], 5,
+        body["postsCount"], 5,
         "without a local profile record, postsCount must not be incremented, got: {body}"
     );
 }
