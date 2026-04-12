@@ -218,6 +218,7 @@ pub async fn build_rocket(cfg: Option<RocketConfig>) -> Rocket<Build> {
         sequencer: RwLock::new(Sequencer::new(
             Crawlers::new(cfg.service.hostname.clone(), cfg.crawlers.clone()),
             None,
+            None,
         )),
     };
     let mut background_sequencer = sequencer.sequencer.write().await.clone();

@@ -54,7 +54,7 @@ async fn inner_delete_account(
         let account_seq = lock
             .sequence_account_evt(did.clone(), AccountStatus::Deleted)
             .await?;
-        sequencer::delete_all_for_user(&did, Some(vec![account_seq])).await?;
+        sequencer::delete_all_for_user(&did, Some(vec![account_seq]), lock.pool()).await?;
         Ok(())
     } else {
         tracing::error!("account not found");
