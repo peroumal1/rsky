@@ -316,12 +316,9 @@ impl BlobReader {
             .chain(duplicated_cids.into_iter())
             .collect();
 
-        // A blob is safe to delete only if it has no remaining references —
-        // i.e. it is NOT in the keep set. Matches TS: deletedRepoBlobCids.filter(cid => !cidsToKeep.includes(cid))
-        let cids_to_delete = deleted_repo_blob_cids
-            .into_iter()
-            .filter(|cid| !cids_to_keep.contains(cid))
-            .collect::<Vec<String>>();
+        // A blob is safe to delete only if it has no remaining references.
+        // Matches TS: deletedRepoBlobCids.filter(cid => !cidsToKeep.includes(cid))
+        let cids_to_delete = blobs_to_delete(deleted_repo_blob_cids, &cids_to_keep);
         if cids_to_delete.is_empty() {
             return Ok(());
         }
@@ -648,4 +645,80 @@ pub async fn sha256_stream(to_hash: Vec<u8>) -> Result<Vec<u8>> {
     let digest = Sha256::digest(&*to_hash);
     let hash: &[u8] = digest.as_ref();
     Ok(hash.to_vec())
+}
+
+/// Returns the subset of `deleted_cids` that have no remaining references,
+/// i.e. those absent from `keep`. These are safe to physically delete.
+///
+/// Mirrors TS: `deletedRepoBlobCids.filter(cid => !cidsToKeep.includes(cid))`
+pub(super) fn blobs_to_delete(
+    deleted_cids: Vec<String>,
+    keep: &HashSet<String>,
+) -> Vec<String> {
+    deleted_cids
+        .into_iter()
+        .filter(|cid| !keep.contains(cid))
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn keep(cids: &[&str]) -> HashSet<String> {
+        cids.iter().map(|s| s.to_string()).collect()
+    }
+
+    fn deleted(cids: &[&str]) -> Vec<String> {
+        cids.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn orphaned_blob_is_deleted() {
+        // Blob removed from a record and not referenced anywhere else → delete it.
+        let result = blobs_to_delete(deleted(&["cid_a"]), &keep(&[]));
+        assert_eq!(result, vec!["cid_a"]);
+    }
+
+    #[test]
+    fn still_referenced_blob_is_kept() {
+        // Blob removed from one record but still referenced by another → do not delete.
+        let result = blobs_to_delete(deleted(&["cid_a"]), &keep(&["cid_a"]));
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn blob_reused_in_new_write_is_kept() {
+        // Blob was on a deleted record but the same write adds it to a new record.
+        let result = blobs_to_delete(deleted(&["cid_a"]), &keep(&["cid_a", "cid_b"]));
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn only_truly_orphaned_blobs_are_deleted() {
+        // Mixed: cid_a still referenced, cid_b is orphaned.
+        let mut result = blobs_to_delete(deleted(&["cid_a", "cid_b"]), &keep(&["cid_a"]));
+        result.sort();
+        assert_eq!(result, vec!["cid_b"]);
+    }
+
+    #[test]
+    fn all_orphaned_blobs_deleted() {
+        let mut result = blobs_to_delete(deleted(&["cid_a", "cid_b", "cid_c"]), &keep(&[]));
+        result.sort();
+        assert_eq!(result, vec!["cid_a", "cid_b", "cid_c"]);
+    }
+
+    #[test]
+    fn no_orphaned_blobs_returns_empty() {
+        let result =
+            blobs_to_delete(deleted(&["cid_a", "cid_b"]), &keep(&["cid_a", "cid_b"]));
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn empty_deleted_list_returns_empty() {
+        let result = blobs_to_delete(deleted(&[]), &keep(&["cid_a"]));
+        assert!(result.is_empty());
+    }
 }
