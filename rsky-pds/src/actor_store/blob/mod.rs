@@ -22,6 +22,7 @@ use rsky_lexicon::com::atproto::repo::ListMissingBlobsRefRecordBlob;
 use rsky_repo::error::BlobError;
 use rsky_repo::types::{PreparedBlobRef, PreparedWrite};
 use sha2::{Digest, Sha256};
+use std::collections::HashSet;
 use std::sync::Arc;
 
 pub struct BlobMetadata {
@@ -310,16 +311,16 @@ impl BlobReader {
             .into_iter()
             .flat_map(|v: Vec<PreparedBlobRef>| v.into_iter().map(|b| b.cid.to_string()))
             .collect();
-        let mut cids_to_keep = Vec::new();
-        cids_to_keep.append(&mut new_blob_cids);
-        cids_to_keep.append(&mut duplicated_cids);
+        let cids_to_keep: HashSet<String> = new_blob_cids
+            .into_iter()
+            .chain(duplicated_cids.into_iter())
+            .collect();
 
+        // A blob is safe to delete only if it has no remaining references —
+        // i.e. it is NOT in the keep set. Matches TS: deletedRepoBlobCids.filter(cid => !cidsToKeep.includes(cid))
         let cids_to_delete = deleted_repo_blob_cids
             .into_iter()
-            .filter_map(|cid: String| match cids_to_keep.contains(&cid) {
-                true => Some(cid),
-                false => None,
-            })
+            .filter(|cid| !cids_to_keep.contains(cid))
             .collect::<Vec<String>>();
         if cids_to_delete.is_empty() {
             return Ok(());
